@@ -1,0 +1,27 @@
+# InstantBoard - Windows desktop soundboard
+# Python 3.12+ required. Install with:  pip install -r requirements.txt
+
+# GUI
+PySide6>=6.6.0
+
+# Networking / scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Audio I/O and decoding
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.26.0
+
+# Windows Core Audio access (default device switching, endpoint info)
+pycaw>=20240210; platform_system == "Windows"
+comtypes>=1.2.0; platform_system == "Windows"
+
+# Global hotkeys (F1-F12, Ctrl combinations)
+keyboard>=0.13.5
+
+# Optional: only used as a decoding fallback for audio files that
+# soundfile/libsndfile cannot read directly. Install ffmpeg itself
+# separately (https://ffmpeg.org/download.html) and ensure it is on
+# your PATH; this package is not required if ffmpeg is unused.
+ffmpeg-python>=0.2.0
