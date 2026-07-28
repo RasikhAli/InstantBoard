@@ -197,21 +197,36 @@ QDialog {{
 
 QTabWidget::pane {{
     border: 1px solid {PALETTE['border']};
-    border-radius: 8px;
+    border-radius: 0px;
+    border-top: none;
+}}
+
+QTabWidget#MainTabs::pane {{
+    border: none;
 }}
 
 QTabBar::tab {{
     background: {PALETTE['surface']};
-    padding: 8px 16px;
-    margin-right: 4px;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
+    padding: 10px 20px;
+    margin-right: 2px;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
     color: {PALETTE['text_muted']};
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 100px;
 }}
 
 QTabBar::tab:selected {{
-    background: {PALETTE['accent']};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {PALETTE['accent']}, stop:1 #a07cff);
     color: white;
+    font-weight: 700;
+}}
+
+QTabBar::tab:hover:!selected {{
+    background: {PALETTE['surface_hover']};
+    color: {PALETTE['text']};
 }}
 
 QListWidget {{
@@ -235,5 +250,79 @@ QToolTip {{
     border: 1px solid {PALETTE['border']};
     padding: 4px;
     border-radius: 4px;
+}}
+
+/* ── TTS Panel ─────────────────────────────────────────────────────────── */
+
+QTextEdit#TTSTextEdit {{
+    background-color: {PALETTE['surface']};
+    border: 1px solid {PALETTE['border']};
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: {PALETTE['text']};
+    font-size: 14px;
+    line-height: 1.5;
+    selection-background-color: {PALETTE['accent']};
+}}
+
+QTextEdit#TTSTextEdit:focus {{
+    border: 1px solid {PALETTE['accent']};
+}}
+
+QLabel#TTSTitle {{
+    font-size: 18px;
+    font-weight: 700;
+    color: {PALETTE['text']};
+}}
+
+QLabel#TTSStatus {{
+    color: {PALETTE['text_muted']};
+    font-size: 11px;
+}}
+
+QPushButton#TTSPlayBtn {{
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 {PALETTE['accent']}, stop:1 #a07cff);
+    border: none;
+    border-radius: 22px;
+    color: white;
+    font-weight: 700;
+}}
+
+QPushButton#TTSPlayBtn:hover {{
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 {PALETTE['accent_hover']}, stop:1 #b08fff);
+    border: 2px solid #ffffff33;
+}}
+
+QPushButton#TTSPlayBtn:pressed {{
+    background-color: {PALETTE['bg_alt']};
+}}
+
+QComboBox#VoiceCombo {{
+    background-color: {PALETTE['surface']};
+    border: 1px solid {PALETTE['border']};
+    border-radius: 10px;
+    padding: 8px 14px;
+    color: {PALETTE['text']};
+    font-size: 13px;
+    min-height: 36px;
+}}
+
+QComboBox#VoiceCombo:hover {{
+    border: 1px solid {PALETTE['accent']};
+}}
+
+QComboBox#VoiceCombo::drop-down {{
+    border: none;
+    width: 24px;
+}}
+
+QComboBox#VoiceCombo QAbstractItemView {{
+    background-color: {PALETTE['surface']};
+    border: 1px solid {PALETTE['border']};
+    selection-background-color: {PALETTE['accent']};
+    outline: none;
+    padding: 4px;
 }}
 """

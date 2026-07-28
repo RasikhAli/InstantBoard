@@ -188,6 +188,15 @@ def get_icon(name: str, size: int = 20, color: str = WHITE) -> QIcon:
     elif name == "normal_mic":
         return get_icon("microphone", size, color)
 
+    elif name == "stop":
+        # Filled square — universal stop symbol
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(brush_color)
+        r = size * 0.22
+        painter.drawRoundedRect(
+            QRectF(size * 0.25, size * 0.25, size * 0.5, size * 0.5), r, r
+        )
+
     else:
         # Unknown icon name: draw a simple placeholder circle so the UI
         # never crashes on a typo, but log-worthy in development.

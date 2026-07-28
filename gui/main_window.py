@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +31,7 @@ from audio.devices import WindowsDefaultDeviceSwitcher, find_vb_cable_input, fin
 from gui.player_widget import PlayerWidget
 from gui.search_widget import SearchWidget
 from gui.settings_dialog import SettingsDialog
+from gui.tts_widget import TTSWidget
 from myinstants.parser import Sound
 from utils.cache import CacheManager
 from utils.icons import get_icon
@@ -164,17 +166,37 @@ class MainWindow(QMainWindow):
 
         root_layout.addWidget(self._build_top_bar())
 
-        content_margin_widget = QWidget()
-        content_layout = QVBoxLayout(content_margin_widget)
-        content_layout.setContentsMargins(20, 16, 20, 16)
+        # ── Tab widget ───────────────────────────────────────────────
+        self._tabs = QTabWidget()
+        self._tabs.setObjectName("MainTabs")
+
+        # ── Sounds tab ───────────────────────────────────────────────
+        sounds_container = QWidget()
+        sounds_layout = QVBoxLayout(sounds_container)
+        sounds_layout.setContentsMargins(20, 16, 20, 16)
 
         self.search_widget = SearchWidget(self._settings, self._cache)
         self.search_widget.sound_ready_to_play.connect(self._on_play_local_path)
         self.search_widget.sound_stop_requested.connect(self._on_stop_sound)
         self.search_widget.status_message.connect(self._on_status_message)
-        content_layout.addWidget(self.search_widget)
+        sounds_layout.addWidget(self.search_widget)
 
-        root_layout.addWidget(content_margin_widget, stretch=1)
+        self._tabs.addTab(sounds_container, get_icon("soundboard", 16), "  Sounds  ")
+
+        # ── TTS tab ──────────────────────────────────────────────────
+        tts_container = QWidget()
+        tts_layout = QVBoxLayout(tts_container)
+        tts_layout.setContentsMargins(20, 16, 20, 16)
+
+        self.tts_widget = TTSWidget(
+            mixer=self._mixer,
+            prepare_playback_fn=self._prepare_soundboard_playback,
+        )
+        tts_layout.addWidget(self.tts_widget)
+
+        self._tabs.addTab(tts_container, get_icon("play", 16, "#7c5cff"), "  TTS  ")
+
+        root_layout.addWidget(self._tabs, stretch=1)
 
         self.player_widget = PlayerWidget(self._settings, self._mixer)
         root_layout.addWidget(self.player_widget)
@@ -340,5 +362,6 @@ class MainWindow(QMainWindow):
         self._settings.set("window_height", self.height())
         self._hotkeys.unregister_all()
         self.search_widget.shutdown()
+        self.tts_widget.shutdown()
         self.player_widget.shutdown()
         super().closeEvent(event)
