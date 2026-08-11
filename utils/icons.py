@@ -197,6 +197,12 @@ def get_icon(name: str, size: int = 20, color: str = WHITE) -> QIcon:
             QRectF(size * 0.25, size * 0.25, size * 0.5, size * 0.5), r, r
         )
 
+    elif name == "time":
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(QRectF(size * 0.15, size * 0.15, size * 0.7, size * 0.7))
+        painter.drawLine(QPointF(size * 0.5, size * 0.25), QPointF(size * 0.5, size * 0.5))
+        painter.drawLine(QPointF(size * 0.5, size * 0.5), QPointF(size * 0.7, size * 0.7))
+
     else:
         # Unknown icon name: draw a simple placeholder circle so the UI
         # never crashes on a typo, but log-worthy in development.

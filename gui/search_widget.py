@@ -322,6 +322,12 @@ class SearchWidget(QWidget):
         self.search_btn.clicked.connect(lambda: self.run_search(self.search_box.text()))
         search_row.addWidget(self.search_btn)
 
+        self.recent_btn = QPushButton("Recent")
+        self.recent_btn.setObjectName("PrimaryButton")
+        self.recent_btn.setIcon(get_icon("time", 16, "#ffffff"))
+        self.recent_btn.clicked.connect(self.load_recent)
+        search_row.addWidget(self.recent_btn)
+
         self.refresh_btn = QPushButton()
         self.refresh_btn.setObjectName("IconButton")
         self.refresh_btn.setIcon(get_icon("refresh", 18))
@@ -368,6 +374,11 @@ class SearchWidget(QWidget):
     def load_trending(self) -> None:
         self._current_query = ""
         self._start_search(None, None)
+
+    def load_recent(self) -> None:
+        self._current_query = ""
+        self.search_box.clear()
+        self._start_search(query=None, url="https://www.myinstants.com/en/recent/")
 
     def run_search(self, query: str) -> None:
         q = query.strip()
@@ -459,20 +470,20 @@ class SearchWidget(QWidget):
     # ------------------------------------------------------------------
     def _on_play_card(self, sound: Sound) -> None:
         card = next((c for c in self._cards if c.sound.id == sound.id), None)
-        if not card:
-            return
 
         cached = self._cache.get_cached_path(sound.download_url)
         if cached is not None:
             # Already cached: play immediately
             path = str(cached)
-            card.set_playing(True)
+            if card:
+                card.set_playing(True)
             self._playing_sounds[sound.id] = path
             self.sound_ready_to_play.emit(path, sound.id)
             return
 
         # Need to download first
-        card.mark_downloading()
+        if card:
+            card.mark_downloading()
         self.status_message.emit(f"Downloading '{sound.title}'...")
         w = DownloadWorker(self._client, self._cache, sound)
         w.finished_ok.connect(self._on_dl_ok)
