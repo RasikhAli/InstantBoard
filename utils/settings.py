@@ -35,6 +35,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "microphone_volume": 0.8,
     "soundboard_volume": 0.8,
     "hotkeys": {},
+    "link_history": [],
     "auto_cleanup_cache": False,
     "auto_cleanup_days": 30,
 }
@@ -147,3 +148,34 @@ class SettingsManager:
             hotkeys = self.get_hotkeys()
             hotkeys.pop(hotkey, None)
             self.set("hotkeys", hotkeys)
+
+    # ------------------------------------------------------------------
+    # Link History helpers
+    # ------------------------------------------------------------------
+    def get_link_history(self) -> List[Dict[str, Any]]:
+        return list(self.get("link_history", []))
+
+    def add_link_history_item(self, item: Dict[str, Any], max_items: int = 150) -> None:
+        """Add or move a link item to the top of the history list."""
+        with self._lock:
+            history = self.get_link_history()
+            # Remove any previous entry with the same URL or ID
+            item_id = item.get("id")
+            item_url = item.get("url")
+            history = [
+                h for h in history
+                if (item_id and h.get("id") != item_id) and (item_url and h.get("url") != item_url)
+            ]
+            history.insert(0, item)
+            if len(history) > max_items:
+                history = history[:max_items]
+            self.set("link_history", history)
+
+    def remove_link_history_item(self, item_id: str) -> None:
+        with self._lock:
+            history = [h for h in self.get_link_history() if h.get("id") != item_id]
+            self.set("link_history", history)
+
+    def clear_link_history(self) -> None:
+        with self._lock:
+            self.set("link_history", [])

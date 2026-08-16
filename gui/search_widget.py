@@ -131,16 +131,15 @@ class SoundCard(QFrame):
         self.setFixedSize(CARD_SIZE, CARD_SIZE)
         self.setCursor(Qt.PointingHandCursor)
 
-        # Card stylesheet with accent color
         self.setStyleSheet(f"""
         QFrame#Card {{
-            background-color: #22222e;
-            border: 1px solid #33333f;
+            background-color: #1a1a26;
+            border: 1px solid #28283a;
             border-radius: 16px;
         }}
         QFrame#Card:hover {{
-            border: 2px solid {self._accent};
-            background-color: #2a2a38;
+            border: 1.5px solid {self._accent};
+            background-color: #212130;
         }}
         """)
 
@@ -153,8 +152,8 @@ class SoundCard(QFrame):
         top.setSpacing(0)
 
         self.fav_btn = QPushButton()
-        self.fav_btn.setObjectName("CardIconBtn")
-        self.fav_btn.setFixedSize(24, 24)
+        self.fav_btn.setObjectName("IconButton")
+        self.fav_btn.setFixedSize(26, 26)
         self.fav_btn.setCursor(Qt.PointingHandCursor)
         self._update_fav_icon()
         self.fav_btn.clicked.connect(self._on_fav_clicked)
@@ -167,12 +166,13 @@ class SoundCard(QFrame):
         if is_cached:
             pix = get_icon("download", 12, "#3ddc97").pixmap(12, 12)
             self.cached_label.setPixmap(pix)
+            self.cached_label.setToolTip("Cached locally (Instant Play)")
         else:
             self.cached_label.setVisible(False)
         top.addWidget(self.cached_label)
         layout.addLayout(top)
 
-        layout.addSpacing(6)
+        layout.addSpacing(4)
 
         # --- Center: large accent-colored play/stop button ---
         center = QHBoxLayout()
@@ -180,23 +180,23 @@ class SoundCard(QFrame):
 
         self.action_btn = QPushButton()
         self.action_btn.setObjectName("CardActionBtn")
-        self.action_btn.setFixedSize(60, 60)
+        self.action_btn.setFixedSize(58, 58)
         self.action_btn.setCursor(Qt.PointingHandCursor)
-        self.action_btn.setIcon(get_icon("play", 36, "#ffffff"))
+        self.action_btn.setIcon(get_icon("play", 32, "#ffffff"))
         self.action_btn.setStyleSheet(f"""
         QPushButton#CardActionBtn {{
             background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 {self._accent}, stop:1 {self._accent}dd);
+                stop:0 {self._accent}, stop:1 {self._accent}cc);
             border: none;
-            border-radius: 30px;
+            border-radius: 29px;
         }}
         QPushButton#CardActionBtn:hover {{
             background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 {self._accent}ee, stop:1 {self._accent});
-            border: 2px solid #ffffff44;
+                stop:0 {self._accent}, stop:1 #ffffff44);
+            border: 2px solid #ffffff55;
         }}
         QPushButton#CardActionBtn:pressed {{
-            background-color: #444;
+            background-color: #12121a;
         }}
         """)
         self.action_btn.clicked.connect(self._on_action_clicked)
@@ -204,21 +204,22 @@ class SoundCard(QFrame):
         center.addStretch()
         layout.addLayout(center)
 
-        layout.addSpacing(8)
+        layout.addSpacing(6)
 
         # --- Bottom: title ---
         self.title_lbl = QLabel(sound.title)
         self.title_lbl.setAlignment(Qt.AlignCenter)
         self.title_lbl.setWordWrap(True)
-        self.title_lbl.setMaximumHeight(42)
-        self.title_lbl.setStyleSheet("color: #f2f2f7; font-size: 11px; font-weight: 500;")
+        self.title_lbl.setMaximumHeight(40)
+        self.title_lbl.setToolTip(sound.title)
+        self.title_lbl.setStyleSheet("color: #f5f5fa; font-size: 11px; font-weight: 600; line-height: 1.2;")
         layout.addWidget(self.title_lbl)
 
         # --- Status text ---
         self.status_lbl = QLabel("")
         self.status_lbl.setAlignment(Qt.AlignCenter)
         self.status_lbl.setFixedHeight(14)
-        self.status_lbl.setStyleSheet("color: #9a9aa5; font-size: 10px;")
+        self.status_lbl.setStyleSheet("color: #85859e; font-size: 10px; font-weight: 500;")
         layout.addWidget(self.status_lbl)
 
         # Double-click also triggers play
@@ -227,7 +228,8 @@ class SoundCard(QFrame):
     # ------------------------------------------------------------------
     def _update_fav_icon(self) -> None:
         name = "favorite_filled" if self._is_favorite else "favorite"
-        self.fav_btn.setIcon(get_icon(name, 14))
+        color = "#ffb830" if self._is_favorite else "#85859e"
+        self.fav_btn.setIcon(get_icon(name, 15, color))
 
     def _on_fav_clicked(self) -> None:
         self._is_favorite = not self._is_favorite
@@ -247,7 +249,34 @@ class SoundCard(QFrame):
         """Toggle the button between play and stop icon."""
         self._is_playing = playing
         icon_name = "pause" if playing else "play"
-        icon_size = 28 if playing else 36
+        icon_size = 26 if playing else 32
+        self.action_btn.setIcon(get_icon(icon_name, icon_size, "#ffffff"))
+        if playing:
+            self.action_btn.setStyleSheet("""
+            QPushButton#CardActionBtn {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #ff5c7a, stop:1 #ff758f);
+                border: 2px solid #ffffff66;
+                border-radius: 29px;
+            }
+            QPushButton#CardActionBtn:hover {
+                background-color: #ff758f;
+            }
+            """)
+        else:
+            self.action_btn.setStyleSheet(f"""
+            QPushButton#CardActionBtn {{
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {self._accent}, stop:1 {self._accent}cc);
+                border: none;
+                border-radius: 29px;
+            }}
+            QPushButton#CardActionBtn:hover {{
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {self._accent}, stop:1 #ffffff44);
+                border: 2px solid #ffffff55;
+            }}
+            """)
         self.action_btn.setIcon(get_icon(icon_name, icon_size, "#ffffff"))
 
     def mark_cached(self) -> None:
@@ -309,38 +338,46 @@ class SearchWidget(QWidget):
 
         # Search row
         search_row = QHBoxLayout()
-        search_row.setSpacing(8)
+        search_row.setSpacing(10)
 
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search sounds on MyInstants...")
+        self.search_box.setPlaceholderText("Search sounds on MyInstants (e.g. anime, meme, bruh, discord)...")
+        self.search_box.setClearButtonEnabled(True)
         self.search_box.returnPressed.connect(lambda: self.run_search(self.search_box.text()))
         search_row.addWidget(self.search_box, stretch=1)
 
-        self.search_btn = QPushButton("Search")
+        self.search_btn = QPushButton(" Search")
         self.search_btn.setObjectName("PrimaryButton")
-        self.search_btn.setIcon(get_icon("search", 16, "#ffffff"))
+        self.search_btn.setIcon(get_icon("search", 15, "#ffffff"))
         self.search_btn.clicked.connect(lambda: self.run_search(self.search_box.text()))
         search_row.addWidget(self.search_btn)
 
-        self.recent_btn = QPushButton("Recent")
-        self.recent_btn.setObjectName("PrimaryButton")
-        self.recent_btn.setIcon(get_icon("time", 16, "#ffffff"))
+        self.trending_btn = QPushButton(" Trending")
+        self.trending_btn.setObjectName("PillButton")
+        self.trending_btn.setIcon(get_icon("trending", 14, "#ffb830"))
+        self.trending_btn.setToolTip("View trending MyInstants sounds")
+        self.trending_btn.clicked.connect(self.load_trending)
+        search_row.addWidget(self.trending_btn)
+
+        self.recent_btn = QPushButton(" Recent")
+        self.recent_btn.setObjectName("PillButton")
+        self.recent_btn.setIcon(get_icon("time", 14, "#38bdf8"))
+        self.recent_btn.setToolTip("View recently uploaded sounds")
         self.recent_btn.clicked.connect(self.load_recent)
         search_row.addWidget(self.recent_btn)
 
         self.refresh_btn = QPushButton()
         self.refresh_btn.setObjectName("IconButton")
-        self.refresh_btn.setIcon(get_icon("refresh", 18))
+        self.refresh_btn.setIcon(get_icon("refresh", 18, "#c2c2d4"))
         self.refresh_btn.setFixedSize(38, 38)
-        self.refresh_btn.setToolTip("Refresh")
+        self.refresh_btn.setToolTip("Refresh current results")
         self.refresh_btn.clicked.connect(self._on_refresh)
         search_row.addWidget(self.refresh_btn)
 
-        self.stop_all_btn = QPushButton()
-        self.stop_all_btn.setObjectName("IconButton")
-        self.stop_all_btn.setIcon(get_icon("close", 16, "#ff5c7a"))
-        self.stop_all_btn.setFixedSize(38, 38)
-        self.stop_all_btn.setToolTip("Stop All Sounds")
+        self.stop_all_btn = QPushButton(" Stop All")
+        self.stop_all_btn.setObjectName("DangerButton")
+        self.stop_all_btn.setIcon(get_icon("close", 14, "#ff5c7a"))
+        self.stop_all_btn.setToolTip("Immediately terminate all playing sounds")
         self.stop_all_btn.clicked.connect(self._on_stop_all)
         search_row.addWidget(self.stop_all_btn)
 

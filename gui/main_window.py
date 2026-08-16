@@ -32,6 +32,7 @@ from gui.player_widget import PlayerWidget
 from gui.search_widget import SearchWidget
 from gui.settings_dialog import SettingsDialog
 from gui.tts_widget import TTSWidget
+from gui.link_player_widget import LinkPlayerWidget
 from myinstants.parser import Sound
 from utils.cache import CacheManager
 from utils.icons import get_icon
@@ -196,6 +197,19 @@ class MainWindow(QMainWindow):
 
         self._tabs.addTab(tts_container, get_icon("play", 16, "#7c5cff"), "  TTS  ")
 
+        # ── Links tab ────────────────────────────────────────────────
+        links_container = QWidget()
+        links_layout = QVBoxLayout(links_container)
+        links_layout.setContentsMargins(20, 16, 20, 16)
+
+        self.link_widget = LinkPlayerWidget(self._settings, self._cache)
+        self.link_widget.sound_ready_to_play.connect(self._on_play_local_path)
+        self.link_widget.sound_stop_requested.connect(self._on_stop_sound)
+        self.link_widget.status_message.connect(self._on_status_message)
+        links_layout.addWidget(self.link_widget)
+
+        self._tabs.addTab(links_container, get_icon("link", 16, "#7c5cff"), "  Links  ")
+
         root_layout.addWidget(self._tabs, stretch=1)
 
         self.player_widget = PlayerWidget(self._settings, self._mixer)
@@ -204,26 +218,87 @@ class MainWindow(QMainWindow):
     def _build_top_bar(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("TopBar")
-        bar.setFixedHeight(64)
+        bar.setFixedHeight(68)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(20, 10, 20, 10)
-        layout.setSpacing(12)
+        layout.setContentsMargins(24, 12, 24, 12)
+        layout.setSpacing(14)
 
+        # Brand / Logo
+        logo_icon = QLabel()
+        logo_icon.setPixmap(get_icon("logo", 26, "#7c5cff").pixmap(26, 26))
+        layout.addWidget(logo_icon)
+
+        brand_layout = QVBoxLayout()
+        brand_layout.setSpacing(1)
+        brand_layout.setContentsMargins(0, 0, 0, 0)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
         title = QLabel("InstantBoard")
         title.setObjectName("TitleLabel")
-        layout.addWidget(title)
+        title_row.addWidget(title)
 
-        self._top_status_label = QLabel("")
-        self._top_status_label.setObjectName("MutedLabel")
-        layout.addWidget(self._top_status_label)
+        pro_badge = QLabel("PRO")
+        pro_badge.setStyleSheet("""
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7c5cff, stop:1 #9d80ff);
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 6px;
+        """)
+        title_row.addWidget(pro_badge)
+        title_row.addStretch()
+        brand_layout.addLayout(title_row)
+
+        subtitle = QLabel("Desktop Soundboard & Live Audio Router")
+        subtitle.setObjectName("BrandSubtitle")
+        brand_layout.addWidget(subtitle)
+        layout.addLayout(brand_layout)
 
         layout.addStretch(1)
 
+        # Dynamic Status Pill
+        self._status_container = QFrame()
+        self._status_container.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e2c;
+                border: 1px solid #2c2c3e;
+                border-radius: 16px;
+                padding: 4px 14px;
+            }
+        """)
+        status_layout = QHBoxLayout(self._status_container)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(8)
+
+        self._status_dot = QLabel("●")
+        self._status_dot.setStyleSheet("color: #3ddc97; font-size: 10px;")
+        status_layout.addWidget(self._status_dot)
+
+        self._top_status_label = QLabel("Ready")
+        self._top_status_label.setStyleSheet("color: #c2c2d4; font-size: 12px; font-weight: 600;")
+        status_layout.addWidget(self._top_status_label)
+
+        layout.addWidget(self._status_container)
+
+        # Settings button
         settings_button = QPushButton()
         settings_button.setObjectName("IconButton")
-        settings_button.setIcon(get_icon("settings", 20))
-        settings_button.setFixedSize(40, 40)
-        settings_button.setToolTip("Settings")
+        settings_button.setIcon(get_icon("settings", 20, "#c2c2d4"))
+        settings_button.setFixedSize(42, 42)
+        settings_button.setToolTip("Settings & Device Configuration")
+        settings_button.setStyleSheet("""
+            QPushButton {
+                background-color: #1e1e2c;
+                border: 1px solid #2c2c3e;
+                border-radius: 12px;
+            }
+            QPushButton:hover {
+                background-color: #262638;
+                border: 1px solid #7c5cff;
+            }
+        """)
         settings_button.clicked.connect(self._open_settings)
         layout.addWidget(settings_button)
 
@@ -244,7 +319,16 @@ class MainWindow(QMainWindow):
         if message == "STOP_ALL":
             self._player.stop_all()
             self._top_status_label.setText("All sounds stopped")
+            self._status_dot.setStyleSheet("color: #ff5c7a; font-size: 10px;")
             return
+        if "error" in message.lower() or "failed" in message.lower():
+            self._status_dot.setStyleSheet("color: #ff5c7a; font-size: 10px;")
+        elif "download" in message.lower() or "loading" in message.lower() or "searching" in message.lower():
+            self._status_dot.setStyleSheet("color: #ffb830; font-size: 10px;")
+        elif "playing" in message.lower() or "ready" in message.lower():
+            self._status_dot.setStyleSheet("color: #3ddc97; font-size: 10px;")
+        else:
+            self._status_dot.setStyleSheet("color: #7c5cff; font-size: 10px;")
         self._top_status_label.setText(message)
 
     def _on_stop_sound(self, sound_id: str) -> None:
@@ -254,6 +338,7 @@ class MainWindow(QMainWindow):
     def _on_sound_finished(self, card_id: str) -> None:
         """Called by SoundPlayer when a sound finishes naturally."""
         self.search_widget.reset_card_playing(card_id)
+        self.link_widget.reset_card_playing(card_id)
 
     def _prepare_soundboard_playback(self) -> None:
         """Proactively switch to VB-CABLE and start the broadcast stream
@@ -363,5 +448,6 @@ class MainWindow(QMainWindow):
         self._hotkeys.unregister_all()
         self.search_widget.shutdown()
         self.tts_widget.shutdown()
+        self.link_widget.shutdown()
         self.player_widget.shutdown()
         super().closeEvent(event)

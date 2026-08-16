@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -50,23 +51,40 @@ class SettingsDialog(QDialog):
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("InstantBoard Settings")
-        self.setMinimumSize(560, 480)
+        self.setWindowTitle("Settings — InstantBoard")
+        self.setMinimumSize(600, 520)
         self._settings = settings
         self._cache = cache
 
         layout = QVBoxLayout(self)
-        tabs = QTabWidget()
-        layout.addWidget(tabs)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(14)
 
-        tabs.addTab(self._build_general_tab(), "General")
-        tabs.addTab(self._build_favorites_tab(), "Favorites")
-        tabs.addTab(self._build_hotkeys_tab(), "Hotkeys")
+        # Dialog Title Header
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+        settings_icon = QLabel()
+        settings_icon.setPixmap(get_icon("settings", 22, "#7c5cff").pixmap(22, 22))
+        header_row.addWidget(settings_icon)
+
+        title = QLabel("InstantBoard Settings")
+        title.setObjectName("TitleLabel")
+        header_row.addWidget(title)
+        header_row.addStretch()
+        layout.addLayout(header_row)
+
+        tabs = QTabWidget()
+        layout.addWidget(tabs, stretch=1)
+
+        tabs.addTab(self._build_general_tab(), "  General & Cache  ")
+        tabs.addTab(self._build_favorites_tab(), "  Favorites  ")
+        tabs.addTab(self._build_hotkeys_tab(), "  Global Hotkeys  ")
 
         close_row = QHBoxLayout()
         close_row.addStretch(1)
-        close_button = QPushButton("Close")
+        close_button = QPushButton(" Done")
         close_button.setObjectName("PrimaryButton")
+        close_button.setIcon(get_icon("check", 14, "#ffffff"))
         close_button.clicked.connect(self.accept)
         close_row.addWidget(close_button)
         layout.addLayout(close_row)
@@ -77,33 +95,58 @@ class SettingsDialog(QDialog):
     def _build_general_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setSpacing(12)
+        layout.setSpacing(14)
+        layout.setContentsMargins(12, 14, 12, 14)
+
+        # Cache Card
+        cache_card = QFrame()
+        cache_card.setObjectName("Card")
+        cache_card.setStyleSheet("""
+            QFrame#Card {
+                background-color: #1a1a26;
+                border: 1px solid #28283a;
+                border-radius: 14px;
+                padding: 16px;
+            }
+        """)
+        cc_layout = QVBoxLayout(cache_card)
+        cc_layout.setSpacing(12)
+
+        header_lbl = QLabel("Audio Disk Cache")
+        header_lbl.setObjectName("SectionHeader")
+        cc_layout.addWidget(header_lbl)
 
         cache_row = QHBoxLayout()
-        cache_label = QLabel(f"Cache folder: {self._cache.cache_dir}")
+        cache_label = QLabel(f"Location: {self._cache.cache_dir}")
         cache_label.setObjectName("MutedLabel")
         self._cache_label = cache_label
         cache_row.addWidget(cache_label, stretch=1)
-        change_button = QPushButton("Change...")
+        change_button = QPushButton("Change Folder...")
         change_button.clicked.connect(self._on_change_cache_folder)
         cache_row.addWidget(change_button)
-        layout.addLayout(cache_row)
+        cc_layout.addLayout(cache_row)
 
-        size_label = QLabel(f"Cache size: {self._format_size(self._cache.total_size_bytes())}")
-        size_label.setObjectName("MutedLabel")
+        size_label = QLabel(f"Total Cached Size: {self._format_size(self._cache.total_size_bytes())}")
+        size_label.setStyleSheet("color: #3ddc97; font-size: 12px; font-weight: 700;")
         self._size_label = size_label
-        layout.addWidget(size_label)
+        cc_layout.addWidget(size_label)
 
-        button_row = QHBoxLayout()
-        clear_button = QPushButton("Clear Cache")
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        clear_button = QPushButton(" Clear Entire Cache")
+        clear_button.setObjectName("DangerButton")
+        clear_button.setIcon(get_icon("trash", 14, "#ff5c7a"))
         clear_button.clicked.connect(self._on_clear_cache)
-        button_row.addWidget(clear_button)
+        btn_row.addWidget(clear_button)
 
-        cleanup_button = QPushButton("Clean Up Old Files (30+ days)")
+        cleanup_button = QPushButton(" Clean Up Old Files (30+ days)")
+        cleanup_button.setIcon(get_icon("time", 14, "#c2c2d4"))
         cleanup_button.clicked.connect(self._on_cleanup_cache)
-        button_row.addWidget(cleanup_button)
-        layout.addLayout(button_row)
+        btn_row.addWidget(cleanup_button)
+        btn_row.addStretch()
+        cc_layout.addLayout(btn_row)
 
+        layout.addWidget(cache_card)
         layout.addStretch(1)
         return widget
 

@@ -30,3 +30,6 @@ ffmpeg-python>=0.2.0
 # On first use it downloads ~400 MB of model weights from Hugging Face.
 # The TTS tab shows a clear install prompt if this is missing.
 pocket-tts>=0.2.0
+
+# Link audio extraction (Instagram, YouTube, Twitter/X, TikTok, etc.)
+yt-dlp>=2026.0.0

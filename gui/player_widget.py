@@ -40,16 +40,31 @@ from utils.settings import SettingsManager
 logger = logging.getLogger(__name__)
 
 
-def _labeled_slider(label_text: str, initial_value: int) -> tuple[QVBoxLayout, QSlider, QLabel]:
+def _labeled_slider(icon_name: str, label_text: str, initial_value: int) -> tuple[QVBoxLayout, QSlider, QLabel]:
     layout = QVBoxLayout()
-    layout.setSpacing(2)
+    layout.setSpacing(4)
     header = QHBoxLayout()
+    header.setSpacing(6)
+
+    icon_lbl = QLabel()
+    icon_lbl.setPixmap(get_icon(icon_name, 14, "#85859e").pixmap(14, 14))
+    header.addWidget(icon_lbl)
+
     label = QLabel(label_text)
     label.setObjectName("MutedLabel")
-    value_label = QLabel(f"{initial_value}%")
-    value_label.setObjectName("MutedLabel")
     header.addWidget(label)
     header.addStretch(1)
+
+    value_label = QLabel(f"{initial_value}%")
+    value_label.setStyleSheet("""
+        background-color: #262638;
+        border: 1px solid #3b3b52;
+        color: #c2c2d4;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 1px 7px;
+        border-radius: 8px;
+    """)
     header.addWidget(value_label)
     layout.addLayout(header)
 
@@ -79,18 +94,28 @@ class PlayerWidget(QWidget):
     def _build_ui(self) -> None:
         self.setObjectName("BottomPanel")
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 14, 20, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(24, 16, 24, 16)
+        root.setSpacing(12)
 
+        # ── Sliders Row ──────────────────────────────────────────────
         sliders_row = QHBoxLayout()
-        sliders_row.setSpacing(24)
+        sliders_row.setSpacing(28)
 
-        pb_layout, self.playback_slider, _ = _labeled_slider("Playback Volume", 80)
-        mic_layout, self.mic_slider, _ = _labeled_slider("Microphone Volume", 80)
-        sb_layout, self.soundboard_slider, _ = _labeled_slider("Soundboard Volume", 80)
+        pb_layout, self.playback_slider, _ = _labeled_slider("speaker", "Playback Volume", 80)
+        mic_layout, self.mic_slider, _ = _labeled_slider("microphone", "Microphone Volume", 80)
+        sb_layout, self.soundboard_slider, _ = _labeled_slider("soundboard", "Soundboard Volume", 80)
 
         for layout in (pb_layout, mic_layout, sb_layout):
-            container = QWidget()
+            container = QFrame()
+            container.setObjectName("Card")
+            container.setStyleSheet("""
+                QFrame#Card {
+                    background-color: #1a1a26;
+                    border: 1px solid #28283a;
+                    border-radius: 12px;
+                    padding: 8px 12px;
+                }
+            """)
             container.setLayout(layout)
             sliders_row.addWidget(container, stretch=1)
 
@@ -100,53 +125,69 @@ class PlayerWidget(QWidget):
 
         root.addLayout(sliders_row)
 
+        # ── Devices & Switcher Row ───────────────────────────────────
         devices_row = QHBoxLayout()
-        devices_row.setSpacing(16)
+        devices_row.setSpacing(18)
 
+        # Output device
         output_layout = QVBoxLayout()
-        output_label = QLabel("Output Device (Broadcast)")
+        output_layout.setSpacing(4)
+        output_label = QLabel("Output Device (Broadcast Feed)")
         output_label.setObjectName("MutedLabel")
         output_layout.addWidget(output_label)
         self.output_combo = QComboBox()
         self.output_combo.currentIndexChanged.connect(self._on_output_device_changed)
         output_layout.addWidget(self.output_combo)
-        devices_row.addLayout(output_layout, stretch=2)
+        devices_row.addLayout(output_layout, stretch=3)
 
+        # Input device
         input_layout = QVBoxLayout()
-        input_label = QLabel("Input Device (Microphone)")
+        input_layout.setSpacing(4)
+        input_label = QLabel("Input Device (Your Microphone)")
         input_label.setObjectName("MutedLabel")
         input_layout.addWidget(input_label)
         self.input_combo = QComboBox()
         self.input_combo.currentIndexChanged.connect(self._on_input_device_changed)
         input_layout.addWidget(self.input_combo)
-        devices_row.addLayout(input_layout, stretch=2)
+        devices_row.addLayout(input_layout, stretch=3)
 
+        # Mode switch buttons
         mode_layout = QVBoxLayout()
+        mode_layout.setSpacing(4)
         mode_label = QLabel("Windows Default Recording Device")
         mode_label.setObjectName("MutedLabel")
         mode_layout.addWidget(mode_label)
+
         mode_buttons = QHBoxLayout()
-        self.normal_button = QPushButton("Normal")
+        mode_buttons.setSpacing(8)
+
+        self.normal_button = QPushButton("Normal Mic")
+        self.normal_button.setIcon(get_icon("normal_mic", 14, "#3ddc97"))
         self.normal_button.clicked.connect(self._on_normal_clicked)
+
         self.soundboard_button = QPushButton("Soundboard")
-        self.soundboard_button.setIcon(get_icon("soundboard", 16))
+        self.soundboard_button.setIcon(get_icon("soundboard", 14, "#7c5cff"))
         self.soundboard_button.clicked.connect(self._on_soundboard_clicked)
+
         mode_buttons.addWidget(self.normal_button)
         mode_buttons.addWidget(self.soundboard_button)
         mode_layout.addLayout(mode_buttons)
-        devices_row.addLayout(mode_layout, stretch=2)
+        devices_row.addLayout(mode_layout, stretch=3)
 
         root.addLayout(devices_row)
 
+        # ── Status Row ───────────────────────────────────────────────
         status_row = QHBoxLayout()
+        status_row.setSpacing(8)
         self.vb_cable_status_icon = QLabel()
         self.vb_cable_status_label = QLabel()
         self.vb_cable_status_label.setObjectName("StatusLabel")
         status_row.addWidget(self.vb_cable_status_icon)
         status_row.addWidget(self.vb_cable_status_label)
         status_row.addStretch(1)
+
         self.mixer_status_label = QLabel("Soundboard mixer: idle")
-        self.mixer_status_label.setObjectName("MutedLabel")
+        self.mixer_status_label.setStyleSheet("color: #85859e; font-size: 11px; font-weight: 500;")
         status_row.addWidget(self.mixer_status_label)
         root.addLayout(status_row)
 
