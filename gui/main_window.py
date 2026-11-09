@@ -33,6 +33,7 @@ from gui.search_widget import SearchWidget
 from gui.settings_dialog import SettingsDialog
 from gui.tts_widget import TTSWidget
 from gui.link_player_widget import LinkPlayerWidget
+from gui.translator_widget import TranslatorWidget
 from myinstants.parser import Sound
 from utils.cache import CacheManager
 from utils.icons import get_icon
@@ -209,6 +210,24 @@ class MainWindow(QMainWindow):
         links_layout.addWidget(self.link_widget)
 
         self._tabs.addTab(links_container, get_icon("link", 16, "#7c5cff"), "  Links  ")
+
+        # ── Live Translator tab ──────────────────────────────────────
+        translator_container = QWidget()
+        translator_layout = QVBoxLayout(translator_container)
+        translator_layout.setContentsMargins(16, 12, 16, 12)
+
+        self.translator_widget = TranslatorWidget(
+            mixer=self._mixer,
+            prepare_playback_fn=self._prepare_soundboard_playback,
+            get_input_device_fn=lambda: getattr(self, "player_widget", None) and self.player_widget._current_input_device(),
+        )
+        translator_layout.addWidget(self.translator_widget)
+
+        self._tabs.addTab(
+            translator_container,
+            get_icon("soundboard", 16, "#3ddc97"),
+            "  Live Translator  ",
+        )
 
         root_layout.addWidget(self._tabs, stretch=1)
 
@@ -449,5 +468,6 @@ class MainWindow(QMainWindow):
         self.search_widget.shutdown()
         self.tts_widget.shutdown()
         self.link_widget.shutdown()
+        self.translator_widget.shutdown()
         self.player_widget.shutdown()
         super().closeEvent(event)

@@ -430,12 +430,22 @@ class LinkPlayerWidget(QWidget):
         self.status_dot.setStyleSheet("color: #ffb830; font-size: 10px;")
         self.status_message.emit(f"Downloading from {platform}...")
 
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.wait(1000)
+
         worker = LinkDownloadWorker(self._extractor, url, self)
         worker.progress.connect(self._on_worker_progress)
         worker.finished_ok.connect(self._on_worker_ok)
         worker.error.connect(self._on_worker_err)
+        worker.finished.connect(lambda w=worker: self._on_worker_finished(w))
         self._worker = worker
         worker.start()
+
+    def _on_worker_finished(self, worker: LinkDownloadWorker) -> None:
+        worker.wait()
+        if self._worker is worker:
+            self._worker = None
+        worker.deleteLater()
 
     def _on_worker_progress(self, msg: str) -> None:
         self.status_lbl.setText(msg)
@@ -563,5 +573,4 @@ class LinkPlayerWidget(QWidget):
 
     def shutdown(self) -> None:
         if self._worker and self._worker.isRunning():
-            self._worker.terminate()
-            self._worker.wait()
+            self._worker.wait(2000)

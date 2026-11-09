@@ -43,8 +43,17 @@ class AudioDecoder:
     """Decodes audio files to (float32 PCM data, samplerate) tuples."""
 
     @staticmethod
+    def _ffmpeg_path() -> Optional[str]:
+        try:
+            import imageio_ffmpeg
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            pass
+        return shutil.which("ffmpeg")
+
+    @staticmethod
     def _ffmpeg_available() -> bool:
-        return shutil.which("ffmpeg") is not None
+        return AudioDecoder._ffmpeg_path() is not None
 
     @staticmethod
     def _decode_with_soundfile(path: Path) -> Tuple[np.ndarray, int]:
@@ -52,15 +61,45 @@ class AudioDecoder:
         return data, samplerate
 
     @staticmethod
+    def _decode_with_pyav(path: Path) -> Tuple[np.ndarray, int]:
+        """Decode using PyAV (FFmpeg C libraries linked in memory)."""
+        import av
+
+        container = av.open(str(path))
+        audio_streams = [s for s in container.streams if s.type == "audio"]
+        if not audio_streams:
+            video_streams = [s for s in container.streams if s.type == "video"]
+            if video_streams:
+                raise PlaybackError(
+                    f"'{path.name}' does not contain any audio stream (the source video is silent or muted)."
+                )
+            raise PlaybackError(f"'{path.name}' does not contain any audio stream.")
+
+        stream = audio_streams[0]
+        resampler = av.AudioResampler(format="fltp", layout="stereo", rate=48000)
+        frames = []
+        for packet in container.demux(stream):
+            for frame in packet.decode():
+                for resampled_frame in resampler.resample(frame):
+                    frames.append(resampled_frame.to_ndarray())
+
+        if not frames:
+            raise PlaybackError(f"Could not extract audio samples from '{path.name}'")
+
+        audio_data = np.concatenate(frames, axis=1).T
+        return audio_data.astype(np.float32), 48000
+
+    @staticmethod
     def _decode_with_ffmpeg(path: Path) -> Tuple[np.ndarray, int]:
-        if not AudioDecoder._ffmpeg_available():
+        ffmpeg_bin = AudioDecoder._ffmpeg_path()
+        if not ffmpeg_bin:
             raise PlaybackError(
-                f"Could not decode '{path.name}': unsupported format and ffmpeg is not installed."
+                f"Could not decode '{path.name}': unsupported format and ffmpeg is not available."
             )
         with tempfile.TemporaryDirectory() as tmp_dir:
             wav_path = Path(tmp_dir) / "decoded.wav"
             command = [
-                "ffmpeg",
+                ffmpeg_bin,
                 "-y",
                 "-loglevel",
                 "error",
@@ -76,7 +115,11 @@ class AudioDecoder:
                 subprocess.run(command, check=True, capture_output=True, timeout=30)
             except subprocess.CalledProcessError as exc:
                 stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
-                raise PlaybackError(f"ffmpeg failed to decode '{path.name}': {stderr}") from exc
+                if "does not contain any stream" in stderr or "could not find codec parameters" in stderr:
+                    raise PlaybackError(
+                        f"'{path.name}' does not contain a playable audio stream (video is silent/muted)."
+                    ) from exc
+                raise PlaybackError(f"ffmpeg failed to decode '{path.name}': {stderr.strip()}") from exc
             except subprocess.TimeoutExpired as exc:
                 raise PlaybackError(f"ffmpeg timed out decoding '{path.name}'") from exc
             return AudioDecoder._decode_with_soundfile(wav_path)
@@ -93,15 +136,21 @@ class AudioDecoder:
         if not file_path.exists() or file_path.stat().st_size == 0:
             raise PlaybackError(f"Audio file is missing or empty: {file_path}")
 
+        # 1. Try soundfile directly (fastest for MP3/WAV/FLAC/OGG)
         try:
             return AudioDecoder._decode_with_soundfile(file_path)
-        except Exception as exc:
-            logger.warning(
-                "soundfile could not decode '%s' directly (%s); falling back to ffmpeg",
-                file_path.name,
-                exc,
-            )
+        except Exception:
+            pass
 
+        # 2. Try PyAV (handles arbitrary modern formats like MP4/WebM/Opus/AAC in-memory)
+        try:
+            return AudioDecoder._decode_with_pyav(file_path)
+        except PlaybackError:
+            raise
+        except Exception as pyav_exc:
+            logger.debug("PyAV decode failed for %s (%s); falling back to ffmpeg", file_path.name, pyav_exc)
+
+        # 3. Try FFmpeg subprocess
         try:
             return AudioDecoder._decode_with_ffmpeg(file_path)
         except PlaybackError:

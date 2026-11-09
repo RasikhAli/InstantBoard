@@ -18,3 +18,16 @@ instantboard.log
 cache/
 *.mp3
 *.wav
+
+# Translator project-local runtime and binary weights
+.runtime/
+models/vad/*
+!models/vad/.gitkeep
+models/asr/*
+!models/asr/.gitkeep
+models/translation/*
+!models/translation/.gitkeep
+models/tts/*
+!models/tts/.gitkeep
+data/voice_profiles/*
+!data/voice_profiles/.gitkeep

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QFrame,
@@ -59,8 +59,8 @@ class SearchWorker(QThread):
     results_ready = Signal(list, object)
     error = Signal(str)
 
-    def __init__(self, client: MyInstantsClient, query: Optional[str] = None, url: Optional[str] = None) -> None:
-        super().__init__()
+    def __init__(self, client: MyInstantsClient, query: Optional[str] = None, url: Optional[str] = None, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
         self._client = client
         self._query = query
         self._url = url
@@ -85,8 +85,8 @@ class DownloadWorker(QThread):
     finished_ok = Signal(str, str)
     error = Signal(str, str)
 
-    def __init__(self, client: MyInstantsClient, cache: CacheManager, sound: Sound) -> None:
-        super().__init__()
+    def __init__(self, client: MyInstantsClient, cache: CacheManager, sound: Sound, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
         self._client = client
         self._cache = cache
         self._sound = sound
@@ -448,11 +448,22 @@ class SearchWidget(QWidget):
             self.status_message.emit("Searching...")
         else:
             self.status_message.emit("Loading more...")
-        w = SearchWorker(self._client, query=query, url=url)
+
+        if self._search_worker is not None and self._search_worker.isRunning():
+            self._search_worker.wait(1000)
+
+        w = SearchWorker(self._client, query=query, url=url, parent=self)
         w.results_ready.connect(self._on_results)
         w.error.connect(self._on_search_err)
+        w.finished.connect(lambda worker=w: self._on_search_worker_finished(worker))
         self._search_worker = w
         w.start()
+
+    def _on_search_worker_finished(self, worker: SearchWorker) -> None:
+        worker.wait()
+        if self._search_worker is worker:
+            self._search_worker = None
+        worker.deleteLater()
 
     def _on_results(self, sounds: List[Sound], next_url: Optional[str]) -> None:
         self._is_loading = False
@@ -461,7 +472,10 @@ class SearchWidget(QWidget):
         self._columns = cols
         for sound in sounds:
             self._add_card(sound)
-        self.status_message.emit(f"{len(self._cards)} sound{'s' if len(self._cards) != 1 else ''} loaded")
+        if not self._cards:
+            self.status_message.emit("No sounds found")
+        else:
+            self.status_message.emit(f"{len(self._cards)} sound{'s' if len(self._cards) != 1 else ''} loaded")
 
     def _on_search_err(self, msg: str) -> None:
         self._is_loading = False
@@ -518,15 +532,26 @@ class SearchWidget(QWidget):
             self.sound_ready_to_play.emit(path, sound.id)
             return
 
+        # If already downloading this sound, do not spawn another worker
+        if sound.id in self._download_workers:
+            return
+
         # Need to download first
         if card:
             card.mark_downloading()
         self.status_message.emit(f"Downloading '{sound.title}'...")
-        w = DownloadWorker(self._client, self._cache, sound)
+        w = DownloadWorker(self._client, self._cache, sound, parent=self)
         w.finished_ok.connect(self._on_dl_ok)
         w.error.connect(self._on_dl_err)
+        w.finished.connect(lambda worker=w, sid=sound.id: self._on_download_finished(worker, sid))
         self._download_workers[sound.id] = w
         w.start()
+
+    def _on_download_finished(self, worker: DownloadWorker, sound_id: str) -> None:
+        worker.wait()
+        if self._download_workers.get(sound_id) is worker:
+            self._download_workers.pop(sound_id, None)
+        worker.deleteLater()
 
     def _on_stop_card(self, sound: Sound) -> None:
         card = next((c for c in self._cards if c.sound.id == sound.id), None)
@@ -542,7 +567,6 @@ class SearchWidget(QWidget):
         self._playing_sounds.pop(sound_id, None)
 
     def _on_dl_ok(self, path: str, sound_id: str) -> None:
-        self._download_workers.pop(sound_id, None)
         card = next((c for c in self._cards if c.sound.id == sound_id), None)
         if card:
             card.mark_cached()
@@ -553,7 +577,6 @@ class SearchWidget(QWidget):
         self.sound_ready_to_play.emit(path, sound_id)
 
     def _on_dl_err(self, msg: str, sound_id: str) -> None:
-        self._download_workers.pop(sound_id, None)
         card = next((c for c in self._cards if c.sound.id == sound_id), None)
         if card:
             card.mark_error(msg)
@@ -571,3 +594,9 @@ class SearchWidget(QWidget):
 
     def shutdown(self) -> None:
         self._client.close()
+        if self._search_worker is not None and self._search_worker.isRunning():
+            self._search_worker.wait(2000)
+        for worker in list(self._download_workers.values()):
+            if worker.isRunning():
+                worker.wait(2000)
+        self._download_workers.clear()

@@ -161,6 +161,14 @@ class AudioMixer:
         self._monitor_queue: Deque[np.ndarray] = collections.deque(maxlen=_QUEUE_MAX_BLOCKS)
         self._queue_lock = threading.Lock()
 
+        # Translator audio source
+        self.translator_active = False
+        self.translator_volume = 1.0
+        self.monitor_translator = False
+        self._translator_broadcast_queue: Deque[np.ndarray] = collections.deque(maxlen=200)
+        self._translator_monitor_queue: Deque[np.ndarray] = collections.deque(maxlen=200)
+        self._translator_lock = threading.Lock()
+
         self.microphone_volume = 0.8
         self.soundboard_volume = 0.8
         self.playback_volume = 0.8  # monitor-only sound volume
@@ -168,18 +176,71 @@ class AudioMixer:
         self.microphone_enabled = False
         self._on_sound_finished = None  # Callback(sound_id) when a sound finishes naturally
 
+    def set_translator_active(self, active: bool) -> None:
+        """Enable or disable translator mode. When active, physical mic audio
+        is suppressed from the broadcast feed so callers hear only translated speech."""
+        self.translator_active = active
+        logger.info("Mixer translator mode: active=%s", active)
+
+    def feed_translator_audio(self, data: np.ndarray, samplerate: int) -> None:
+        """Ingest synthesized translator audio, normalize to 48kHz stereo, and queue for broadcast."""
+        normalized = _resample_linear(data, samplerate, SAMPLE_RATE)
+        if normalized.ndim == 1:
+            normalized = normalized[:, np.newaxis]
+        if normalized.shape[1] == 1:
+            normalized = np.repeat(normalized, 2, axis=1)
+        elif normalized.shape[1] > 2:
+            normalized = normalized[:, :2]
+
+        normalized = normalized.astype(np.float32)
+
+        # Slice into PORT_AUDIO_BLOCKSIZE blocks for smooth streaming
+        with self._translator_lock:
+            n_samples = normalized.shape[0]
+            for start in range(0, n_samples, PORT_AUDIO_BLOCKSIZE):
+                end = min(start + PORT_AUDIO_BLOCKSIZE, n_samples)
+                block = normalized[start:end]
+                if block.shape[0] < PORT_AUDIO_BLOCKSIZE:
+                    pad = np.zeros(
+                        (PORT_AUDIO_BLOCKSIZE - block.shape[0], 2), dtype=np.float32
+                    )
+                    block = np.concatenate([block, pad], axis=0)
+                self._translator_broadcast_queue.append(block.copy())
+                if self.monitor_translator:
+                    self._translator_monitor_queue.append(block.copy())
+
+    def clear_translator_audio(self) -> None:
+        """Immediately flush all queued translator audio."""
+        with self._translator_lock:
+            self._translator_broadcast_queue.clear()
+            self._translator_monitor_queue.clear()
+
+    def _pop_translator_broadcast_block(self, frames: int) -> np.ndarray:
+        with self._translator_lock:
+            if self._translator_broadcast_queue:
+                block = self._translator_broadcast_queue.popleft()
+                if block.shape[0] == frames:
+                    return block
+        return np.zeros((frames, 2), dtype=np.float32)
+
+    def _pop_translator_monitor_block(self, frames: int) -> np.ndarray:
+        with self._translator_lock:
+            if self._translator_monitor_queue:
+                block = self._translator_monitor_queue.popleft()
+                if block.shape[0] == frames:
+                    return block
+        return np.zeros((frames, 2), dtype=np.float32)
+
     # ------------------------------------------------------------------
     # Sound registration (called by audio.player.SoundPlayer)
     # ------------------------------------------------------------------
     def add_sound(self, data: np.ndarray, samplerate: int) -> int:
         """Register a decoded sound buffer for playback and return its id."""
-        # Always resample to the fixed internal rate (48kHz). PortAudio will
-        # handle device-specific resampling in its callbacks.
         normalized = _resample_linear(data, samplerate, SAMPLE_RATE)
         if normalized.ndim == 1:
             normalized = normalized[:, np.newaxis]
         if normalized.shape[1] == 1:
-            normalized = np.repeat(normalized, 2, axis=1)  # stereo everywhere internally
+            normalized = np.repeat(normalized, 2, axis=1)
         elif normalized.shape[1] > 2:
             normalized = normalized[:, :2]
         with self._lock:
@@ -205,8 +266,6 @@ class AudioMixer:
     # Internal mixing (only ever called from the render thread)
     # ------------------------------------------------------------------
     def _pull_sound_mix(self, n_frames: int) -> np.ndarray:
-        """Advance every active sound by n_frames and return their sum,
-        removing any that have finished. Only called by _RenderThread."""
         mix = np.zeros((n_frames, 2), dtype=np.float32)
         with self._lock:
             finished_ids: List[int] = []
@@ -247,10 +306,16 @@ class AudioMixer:
     def _broadcast_callback(self, outdata: np.ndarray, frames: int, time_info, status) -> None:
         if status:
             logger.debug("Broadcast stream status: %s", status)
-        # Pop pre-rendered mix from queue and add microphone
+        # Pop pre-rendered mix from queue
         sound_mix = self._pop_block(self._broadcast_queue, frames) * self.soundboard_volume
 
-        if self.microphone_enabled and self.microphone.is_active:
+        # Pop translated speech audio
+        trans_audio = self._pop_translator_broadcast_block(frames) * self.translator_volume
+
+        # When translator is active, suppress original mic so callers hear only translated speech
+        if self.translator_active:
+            mic = np.zeros((frames, 2), dtype=np.float32)
+        elif self.microphone_enabled and self.microphone.is_active:
             mic = self.microphone.read_latest(frames) * self.microphone_volume
             if mic.ndim == 1:
                 mic = mic[:, np.newaxis]
@@ -260,20 +325,25 @@ class AudioMixer:
             mic = np.zeros((frames, 2), dtype=np.float32)
 
         # Mix with slight ducking to prevent clipping
-        mixed = sound_mix + mic * 0.9
+        mixed = sound_mix + trans_audio + mic * 0.9
         outdata[:] = _soft_limit(mixed)
 
     def _monitor_callback(self, outdata: np.ndarray, frames: int, time_info, status) -> None:
         if status:
             logger.debug("Monitor stream status: %s", status)
         sound_mix = self._pop_block(self._monitor_queue, frames) * self.playback_volume
+        if self.monitor_translator:
+            trans_audio = self._pop_translator_monitor_block(frames) * self.translator_volume
+            sound_mix = sound_mix + trans_audio
         outdata[:] = _soft_limit(sound_mix)
 
     def _broadcast_sounds_only_callback(self, outdata: np.ndarray, frames: int, time_info, status) -> None:
         if status:
             logger.debug("Broadcast sounds-only stream status: %s", status)
         sound_mix = self._pop_block(self._broadcast_queue, frames) * self.soundboard_volume
-        outdata[:] = _soft_limit(sound_mix)
+        trans_audio = self._pop_translator_broadcast_block(frames) * self.translator_volume
+        mixed = sound_mix + trans_audio
+        outdata[:] = _soft_limit(mixed)
 
     # ------------------------------------------------------------------
     # Stream lifecycle
@@ -341,8 +411,9 @@ class AudioMixer:
                 logger.warning("Error stopping broadcast stream: %s", exc)
             finally:
                 self._broadcast_stream = None
-        self.microphone.stop()
-        self.microphone_enabled = False
+        if not self.translator_active:
+            self.microphone.stop()
+            self.microphone_enabled = False
 
     def start_monitor(self, device_index: Optional[int]) -> None:
         """Start streaming sounds-only audio to the user's local

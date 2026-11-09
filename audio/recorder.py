@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import sounddevice as sd
@@ -42,6 +42,7 @@ class MicrophoneRecorder:
         self._buffer = np.zeros((self._buffer_len, channels), dtype=np.float32)
         self._write_pos = 0
         self._lock = threading.Lock()
+        self._listeners: list[Callable[[np.ndarray, int], None]] = []
         self._stream: Optional[sd.InputStream] = None
         self._device_index: Optional[int] = None
         self._muted = False
@@ -53,6 +54,16 @@ class MicrophoneRecorder:
     @property
     def device_index(self) -> Optional[int]:
         return self._device_index
+
+    def add_listener(self, listener: Callable[[np.ndarray, int], None]) -> None:
+        """Register a callback(data: np.ndarray, samplerate: int) to receive live mic audio."""
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[np.ndarray, int], None]) -> None:
+        """Unregister a previously registered mic audio listener."""
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
     def set_muted(self, muted: bool) -> None:
         self._muted = muted
@@ -70,6 +81,16 @@ class MicrophoneRecorder:
                 self._buffer[self._write_pos:] = data[:first_part]
                 self._buffer[: end - self._buffer_len] = data[first_part:]
             self._write_pos = end % self._buffer_len
+
+        # Dispatch non-blocking copies to external listeners (e.g. streaming VAD/ASR)
+        listeners = list(self._listeners)
+        if listeners and not self._muted:
+            copy_data = indata.copy()
+            for listener in listeners:
+                try:
+                    listener(copy_data, self.samplerate)
+                except Exception:
+                    pass
 
     def start(self, device_index: Optional[int]) -> None:
         """Start (or restart, if already running on a different device)

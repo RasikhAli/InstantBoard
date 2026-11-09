@@ -7,6 +7,7 @@ PySide6>=6.6.0
 # Networking / scraping
 requests>=2.31.0
 beautifulsoup4>=4.12.0
+curl_cffi>=0.7.0
 
 # Audio I/O and decoding
 sounddevice>=0.4.6
@@ -25,11 +26,11 @@ keyboard>=0.13.5
 # separately (https://ffmpeg.org/download.html) and ensure it is on
 # your PATH; this package is not required if ffmpeg is unused.
 ffmpeg-python>=0.2.0
+imageio-ffmpeg>=0.5.0
 
-# TTS panel — Kyutai Pocket TTS (100M param model, runs on CPU).
-# On first use it downloads ~400 MB of model weights from Hugging Face.
-# The TTS tab shows a clear install prompt if this is missing.
+# TTS panel — Kyutai Pocket TTS + Edge TTS for high-accuracy Urdu & multilingual voices
 pocket-tts>=0.2.0
+edge-tts>=7.0.0
 
 # Link audio extraction (Instagram, YouTube, Twitter/X, TikTok, etc.)
 yt-dlp>=2026.0.0

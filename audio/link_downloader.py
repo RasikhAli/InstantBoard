@@ -151,6 +151,13 @@ class LinkAudioExtractor:
             on_status(f"Connecting to {platform}...")
 
         import yt_dlp
+        import imageio_ffmpeg
+
+        ffmpeg_exe = None
+        try:
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            pass
 
         out_template = str(self._cache.cache_dir / f"link_{url_hash}.%(ext)s")
 
@@ -165,6 +172,14 @@ class LinkAudioExtractor:
             "noplaylist": True,
             "ignoreerrors": False,
         }
+
+        if ffmpeg_exe:
+            ydl_opts["ffmpeg_location"] = ffmpeg_exe
+            ydl_opts["postprocessors"] = [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }]
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -189,17 +204,37 @@ class LinkAudioExtractor:
                 duration_sec = info.get("duration")
                 duration_str = format_duration(duration_sec)
 
-                filename = ydl.prepare_filename(info)
-                downloaded_path = Path(filename)
+                # Look for downloaded file matching link_{url_hash}.*
+                # Prefer .mp3 if postprocessed
+                mp3_candidate = self._cache.cache_dir / f"link_{url_hash}.mp3"
+                if mp3_candidate.exists():
+                    downloaded_path = mp3_candidate
+                else:
+                    filename = ydl.prepare_filename(info)
+                    downloaded_path = Path(filename)
+                    if not downloaded_path.exists():
+                        found = list(self._cache.cache_dir.glob(f"link_{url_hash}.*"))
+                        if found:
+                            downloaded_path = found[0]
+                        else:
+                            raise FileNotFoundError(f"Audio file was not saved to {filename}")
 
-                # If for some reason prepare_filename extension differed from actual downloaded file:
-                if not downloaded_path.exists():
-                    # Look for file matching link_{url_hash}.*
-                    found = list(self._cache.cache_dir.glob(f"link_{url_hash}.*"))
-                    if found:
-                        downloaded_path = found[0]
-                    else:
-                        raise FileNotFoundError(f"Audio file was not saved to {filename}")
+                # Verify that the downloaded file contains an actual audio stream
+                try:
+                    import av
+                    with av.open(str(downloaded_path)) as c:
+                        if not any(s.type == "audio" for s in c.streams):
+                            try:
+                                downloaded_path.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            raise RuntimeError(
+                                f"This {platform} video does not have an audio track (it is silent or muted)."
+                            )
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass
 
                 meta = {
                     "id": f"link_{url_hash}",
@@ -219,7 +254,9 @@ class LinkAudioExtractor:
         except Exception as exc:
             logger.exception("Error extracting audio from link: %s", url)
             err_msg = str(exc)
-            if "Unsupported URL" in err_msg:
+            if "unable to obtain file audio codec" in err_msg.lower() or "does not have an audio track" in err_msg.lower():
+                err_msg = f"This {platform} video does not have an audio track (it is silent or muted)."
+            elif "Unsupported URL" in err_msg:
                 err_msg = "Unsupported website or invalid link format."
             elif "Private video" in err_msg or "login" in err_msg.lower():
                 err_msg = "Content is private or requires login."
